@@ -1,0 +1,426 @@
+app:
+  description: 'Кибер ОП Squad Engine — внутренний движок обработки входящих лидов. Op Brain классифицирует сообщение клиента и передаёт его одному из четырёх специалистов Squad: Scout, Expert, Closer или Matcher. Каждый специалист работает в изолированном контексте, чтобы LLM не путалась.'
+  icon: ⚡
+  icon_background: '#0F172A'
+  mode: advanced-chat
+  name: 'Кибер ОП — Squad Engine'
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.3.1
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload: {}
+    opening_statement: 'Здравствуйте! Это Squad от Кибер ОП. Расскажите, чем могу быть полезен — или задайте вопрос по продукту.'
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions:
+      - 'Привет, что у вас за продукт?'
+      - 'Сколько стоит?'
+      - 'Я хочу оформить покупку'
+      - 'Подойдёт ли мне?'
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+      - id: e_intake_brain
+        source: 'op_intake'
+        sourceHandle: source
+        target: 'op_brain'
+        targetHandle: target
+        type: custom
+      - id: e_brain_dispatch
+        source: 'op_brain'
+        sourceHandle: source
+        target: 'op_dispatch'
+        targetHandle: target
+        type: custom
+      - id: e_dispatch_scout
+        source: 'op_dispatch'
+        sourceHandle: 'scout'
+        target: 'op_scout'
+        targetHandle: target
+        type: custom
+      - id: e_dispatch_closer
+        source: 'op_dispatch'
+        sourceHandle: 'closer'
+        target: 'op_closer'
+        targetHandle: target
+        type: custom
+      - id: e_dispatch_matcher
+        source: 'op_dispatch'
+        sourceHandle: 'matcher'
+        target: 'op_matcher'
+        targetHandle: target
+        type: custom
+      - id: e_dispatch_expert
+        source: 'op_dispatch'
+        sourceHandle: 'false'
+        target: 'op_expert'
+        targetHandle: target
+        type: custom
+      - id: e_scout_out
+        source: 'op_scout'
+        sourceHandle: source
+        target: 'op_scout_out'
+        targetHandle: target
+        type: custom
+      - id: e_expert_out
+        source: 'op_expert'
+        sourceHandle: source
+        target: 'op_expert_out'
+        targetHandle: target
+        type: custom
+      - id: e_closer_out
+        source: 'op_closer'
+        sourceHandle: source
+        target: 'op_closer_out'
+        targetHandle: target
+        type: custom
+      - id: e_matcher_out
+        source: 'op_matcher'
+        sourceHandle: source
+        target: 'op_matcher_out'
+        targetHandle: target
+        type: custom
+
+    nodes:
+      - data:
+          desc: 'Сообщение клиента'
+          title: Intake
+          type: start
+          variables: []
+        id: 'op_intake'
+        position: { x: 30, y: 400 }
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+
+      - data:
+          desc: 'Классифицирует намерение клиента в одну из 4 категорий Squad'
+          title: '🧠 Op Brain'
+          type: llm
+          context:
+            enabled: false
+            variable_selector: []
+          memory:
+            window:
+              enabled: true
+              size: 5
+          model:
+            mode: chat
+            name: gpt-4o-mini
+            provider: langgenius/openai/openai
+            completion_params:
+              temperature: 0.0
+          prompt_template:
+            - role: system
+              text: |
+                Ты — Op Brain в Кибер ОП Squad Engine. Твоя единственная задача — классифицировать сообщение клиента в ОДНУ из четырёх категорий Squad.
+
+                Категории:
+                - scout — клиент только пришёл, представляется, спрашивает общее «что у вас?», «расскажите о компании», нужно его квалифицировать (узнать роль, бюджет, боль).
+                - expert — клиент задаёт вопросы о продукте, услугах, методах, программе, преподавателях, формате.
+                - closer — клиент готов или близок к покупке: «как купить?», «дайте ссылку», «оплачу сейчас», «отправьте счёт», обсуждает условия.
+                - matcher — клиент хочет конкретный вариант/тариф/пакет: «какой тариф мне?», «есть ли ваше что-то под X?».
+
+                Учитывай контекст предыдущих сообщений из памяти диалога.
+
+                ВЫВОД: ОДНО слово из списка: scout, expert, closer, matcher. Без пояснений, без префиксов, без точек.
+            - role: user
+              text: '{{#sys.query#}}'
+          variables: []
+          vision:
+            enabled: false
+        id: 'op_brain'
+        position: { x: 320, y: 400 }
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+
+      - data:
+          desc: 'Маршрутизация по результату Op Brain'
+          title: 'Op Dispatch'
+          type: if-else
+          cases:
+            - case_id: 'scout'
+              logical_operator: and
+              conditions:
+                - id: c_scout
+                  variable_selector: ['op_brain', 'text']
+                  comparison_operator: contains
+                  value: scout
+                  varType: string
+            - case_id: 'closer'
+              logical_operator: and
+              conditions:
+                - id: c_closer
+                  variable_selector: ['op_brain', 'text']
+                  comparison_operator: contains
+                  value: closer
+                  varType: string
+            - case_id: 'matcher'
+              logical_operator: and
+              conditions:
+                - id: c_matcher
+                  variable_selector: ['op_brain', 'text']
+                  comparison_operator: contains
+                  value: matcher
+                  varType: string
+        id: 'op_dispatch'
+        position: { x: 620, y: 400 }
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+
+      - data:
+          desc: 'Знакомство и квалификация лида'
+          title: '🔍 Scout'
+          type: llm
+          context:
+            enabled: false
+            variable_selector: []
+          memory:
+            window:
+              enabled: true
+              size: 10
+          model:
+            mode: chat
+            name: gpt-4o-mini
+            provider: langgenius/openai/openai
+            completion_params:
+              temperature: 0.7
+          prompt_template:
+            - role: system
+              text: |
+                Ты — Scout в Кибер ОП Squad. Твой стиль — дружелюбный, лёгкий, но профессиональный. Твоя единственная задача — мягко квалифицировать клиента: понять, кто он, какая у него боль, какой контекст, есть ли у него ресурс/бюджет.
+
+                Контекст: продаём «Курс по AI-агентам, $497», для предпринимателей малого бизнеса, курс длится 6 недель, ведёт практик с опытом запуска AI-проектов.
+
+                Правила:
+                - Не продавай в первом сообщении. Не называй цену, если клиент сам не спросил.
+                - Задавай ОДИН открытый вопрос за раз.
+                - Слушай. Перефразируй то, что услышал, чтобы клиент чувствовал — его поняли.
+                - Цели разговора (порядок): кто он → что у него за бизнес → какая ключевая боль с AI/автоматизацией → есть ли срочность.
+                - Когда понимаешь, что клиент хочет глубже — намекни, что в Squad есть Expert, который ответит технически.
+                - Длина ответа: 1-2 предложения. Не больше.
+
+                Если клиент в начале — поздоровайся и спроси, как его зовут и чем занимается.
+            - role: user
+              text: '{{#sys.query#}}'
+          variables: []
+          vision:
+            enabled: false
+        id: 'op_scout'
+        position: { x: 920, y: 100 }
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+
+      - data:
+          desc: 'Ответы на вопросы о продукте'
+          title: '🎓 Expert'
+          type: llm
+          context:
+            enabled: false
+            variable_selector: []
+          memory:
+            window:
+              enabled: true
+              size: 10
+          model:
+            mode: chat
+            name: gpt-4o-mini
+            provider: langgenius/openai/openai
+            completion_params:
+              temperature: 0.5
+          prompt_template:
+            - role: system
+              text: |
+                Ты — Expert в Кибер ОП Squad. Твой стиль — экспертный, конкретный, без воды. Твоя задача — отвечать на вопросы о продукте предметно, с фактами, без манипуляций.
+
+                Контекст продукта: «Курс по AI-агентам, $497», 6 недель, 12 модулей, по 2 модуля в неделю. Темы: основы LLM, prompt engineering, RAG, multi-agent системы, интеграции (CRM/мессенджеры), деплой. Формат — записанные видеоуроки + еженедельные созвоны с куратором + чат-комьюнити. Для предпринимателей и команд малого бизнеса. Куратор — практик с 5+ AI-проектами в проде.
+
+                Правила:
+                - Отвечай ровно на вопрос клиента. Не уходи в сторону.
+                - Если вопрос о цене — отвечай прямо: $497.
+                - Если вопрос о результате — конкретные кейсы или метрики, не обещания.
+                - Если что-то не знаешь — признай, скажи «уточню у автора».
+                - Не выдумывай факты. Лучше меньше, но точно.
+                - Длина: 2-4 предложения. Не лекции.
+                - В конце ответа можно задать один уточняющий вопрос, чтобы понять, что клиенту ещё интересно.
+            - role: user
+              text: '{{#sys.query#}}'
+          variables: []
+          vision:
+            enabled: false
+        id: 'op_expert'
+        position: { x: 920, y: 300 }
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+
+      - data:
+          desc: 'Закрытие сделки и оплата'
+          title: '⚡ Closer'
+          type: llm
+          context:
+            enabled: false
+            variable_selector: []
+          memory:
+            window:
+              enabled: true
+              size: 10
+          model:
+            mode: chat
+            name: gpt-4o-mini
+            provider: langgenius/openai/openai
+            completion_params:
+              temperature: 0.6
+          prompt_template:
+            - role: system
+              text: |
+                Ты — Closer в Кибер ОП Squad. Твой стиль — уверенный, прямой, дожимающий, но без давления. Твоя задача — довести готового клиента до оплаты.
+
+                Контекст: «Курс по AI-агентам, $497». Старт следующего потока — через неделю. Гарантия возврата 14 дней. Оплата картой (Stripe), криптой или в рассрочку (3 платежа по $179).
+
+                Правила:
+                - Если клиент сказал «куплю», «оплачу», «дайте ссылку» — давай ссылку: https://comandos.ai/checkout
+                - Перед ссылкой подтверди детали (тариф, способ оплаты).
+                - Если клиент колеблется — преодолей возражение конкретно (цена/время/сомнение в результате), но не дави.
+                - Никогда не врёшь, не обещаешь то, чего нет.
+                - Если клиент просит скидку — есть «приведи друга = -$100 каждому».
+                - Длина: 2-3 предложения + действие (ссылка/инструкция).
+
+                Главное правило Closer: клиент должен сам сказать «да» дважды — что хочет это решить и что готов оплатить. Иначе передаёшь обратно Scout.
+            - role: user
+              text: '{{#sys.query#}}'
+          variables: []
+          vision:
+            enabled: false
+        id: 'op_closer'
+        position: { x: 920, y: 500 }
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+
+      - data:
+          desc: 'Подбор тарифа/варианта'
+          title: '🎯 Matcher'
+          type: llm
+          context:
+            enabled: false
+            variable_selector: []
+          memory:
+            window:
+              enabled: true
+              size: 10
+          model:
+            mode: chat
+            name: gpt-4o-mini
+            provider: langgenius/openai/openai
+            completion_params:
+              temperature: 0.5
+          prompt_template:
+            - role: system
+              text: |
+                Ты — Matcher в Кибер ОП Squad. Твой стиль — заботливый, структурный, ориентированный на пользу клиента. Твоя задача — подобрать правильный тариф/формат под нужду клиента.
+
+                Контекст — варианты:
+                1. **Курс самостоятельный** — $497, 6 недель видеоуроков + чат-комьюнити, без созвонов с куратором. Для тех, кто привык учиться сам.
+                2. **Курс + кураторство** — $897, всё из 1 + еженедельные 1-на-1 созвоны 30 мин с куратором. Для тех, кому нужна обратная связь и мотивация.
+                3. **Командный пакет** — $2,497, до 5 человек из одной компании, всё из 2 + командный воркшоп. Для команд.
+
+                Правила:
+                - Сначала уточни критерий выбора: «вы один или с командой?», «какой стиль обучения вам ближе?», «есть ли срочность?».
+                - Не предлагай больше двух тарифов сразу — это парализует.
+                - Рекомендуй один + альтернативу.
+                - Не пытайся дороже продать — рекомендуй то, что реально подходит.
+                - Если у клиента ноль контекста — задай 2 вопроса перед рекомендацией.
+                - Длина: 3-5 предложений + чёткая рекомендация.
+
+                Когда клиент выбрал — передавай дальше: «Отлично, передаю вам ссылку на оплату».
+            - role: user
+              text: '{{#sys.query#}}'
+          variables: []
+          vision:
+            enabled: false
+        id: 'op_matcher'
+        position: { x: 920, y: 700 }
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+
+      - data:
+          answer: '{{#op_scout.text#}}'
+          desc: ''
+          title: 'Output — Scout'
+          type: answer
+          variables: []
+        id: 'op_scout_out'
+        position: { x: 1220, y: 100 }
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+
+      - data:
+          answer: '{{#op_expert.text#}}'
+          desc: ''
+          title: 'Output — Expert'
+          type: answer
+          variables: []
+        id: 'op_expert_out'
+        position: { x: 1220, y: 300 }
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+
+      - data:
+          answer: '{{#op_closer.text#}}'
+          desc: ''
+          title: 'Output — Closer'
+          type: answer
+          variables: []
+        id: 'op_closer_out'
+        position: { x: 1220, y: 500 }
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+
+      - data:
+          answer: '{{#op_matcher.text#}}'
+          desc: ''
+          title: 'Output — Matcher'
+          type: answer
+          variables: []
+        id: 'op_matcher_out'
+        position: { x: 1220, y: 700 }
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.6
